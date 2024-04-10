@@ -24,8 +24,11 @@ def clean_rows(df):
 
     # Generate the full date-time range with an hourly frequency
     full_range = pd.date_range(
-        start="2015-07-01 01:00:00", end="2023-01-01 00:00:00", freq="H"
+        start="2015-07-01 01:00:00", end="2024-01-01 00:00:00", freq="H"
     )
+    # full_range = pd.date_range(
+    #     start="2023-01-01 00:00:00", end="2024-01-01 00:00:00", freq="H"
+    # )
 
     # Set the DataFrame's index to the 'timestamp' column
     df.set_index("timestamp", inplace=True)
@@ -34,7 +37,7 @@ def clean_rows(df):
     df = df.reindex(full_range)
 
     # Forward fill missing values for each column
-    columns_to_fill = ["Demand (MWh)", "Demand Forecast (MWh)", "Net Generation (MWh)"]
+    columns_to_fill = ["Demand (MWh)", "Demand Forecast (MWh)"]
     for col in columns_to_fill:
         df[col].fillna(method="ffill", inplace=True)
 
@@ -45,7 +48,7 @@ def clean_rows(df):
     return df
 
 
-def get_concatenated_table(region_name):
+def get_concatenated_table(region_name, mean_demand=None, std_demand=None):
     """
     Given an arbitrary number of small tables downloaded from eia.gov,
     this concatenates all of them and sorts by time, retuning a final
@@ -113,14 +116,22 @@ def get_concatenated_table(region_name):
     final_df["Region"] = region_name
 
     # Z-score normalization
-    mean_demand = final_df["Demand (MWh)"].mean()
-    std_demand = final_df["Demand (MWh)"].std()
+    if mean_demand is None:
+        mean_demand = final_df["Demand (MWh)"].mean()
+    if std_demand is None:
+        std_demand = final_df["Demand (MWh)"].std()
 
+    print(f"demand mean: {mean_demand}")
+    print(f"demand std: {std_demand}")
     print(f"max: {max(final_df['Demand (MWh)'])}")
     print(f"threshold: {mean_demand+3*std_demand}")
 
     final_df["Normalized Demand"] = (
         final_df["Demand (MWh)"] - mean_demand
+    ) / std_demand
+
+    final_df["Normalized Forecast"] = (
+        final_df["Demand Forecast (MWh)"] - mean_demand
     ) / std_demand
 
     return final_df

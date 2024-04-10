@@ -53,6 +53,42 @@ def mae_loss(output, target):
     return loss
 
 
+def remove_overlapping_intervals(primary_list, secondary_list):
+    def is_overlapping(interval1, interval2):
+        # Returns True if interval1 overlaps with interval2
+        return interval1[0] < interval2[1] and interval1[1] > interval2[0]
+
+    result = (
+        []
+    )  # List to store intervals from secondary_list that do not overlap with primary_list
+    for secondary_interval in secondary_list:
+        overlap = False
+        for primary_interval in primary_list:
+            if is_overlapping(primary_interval, secondary_interval):
+                # print(f"overlap between {primary_interval} and {secondary_interval}")
+                overlap = True
+                break
+        if not overlap:
+            result.append(secondary_interval)
+    return result
+
+
+# def remove_overlapping_indices(primary_set, secondary_set, T):
+#     """
+#     Remove indices from the secondary_set that overlap with any index in the primary_set,
+#     considering the input length T.
+#     """
+#     to_remove = set()
+#     for primary_index in primary_set:
+#         # Calculate the range of indices that would overlap with primary_index considering T
+#         overlapping_range = set(range(primary_index[0] - T + 1, primary_index[1] + T))
+#         to_remove |= (
+#             overlapping_range & secondary_set
+#         )  # Find and add overlapping indices
+#     secondary_set -= to_remove  # Remove overlapping indices
+#     return secondary_set
+
+
 def generate_square_subsequent_mask(dim1: int, dim2: int):
     return torch.triu(torch.ones(dim1, dim2) * float("-inf"), diagonal=1)
 
@@ -112,19 +148,30 @@ def normalize_continuous_vars(data, var_names):
         # Z-score normalization
         mean = data[var].mean()
         std = data[var].std()
+        print(f"{var}: mean: {mean}, std: {std}")
         data.loc[:, var] = (data[var] - mean) / std
     return data
 
 
 def normalize_discrete_vars(data, var_names):
-    # mean/std normalize.
+    mappings = {}
+
     for var in var_names:
         assert var in data.columns, f"Error: {var} is not a column of input dataframe."
+
+        print(f"Normalizing {var}")
         # Use factorize to assign a unique index to each category in 'col1'
         codes, uniques = pd.factorize(data[var])
 
+        # Store the mapping from unique values to codes in a dictionary
+        mapping = {val: code for code, val in enumerate(uniques)}
+        mappings[var] = mapping
+
         # The 'codes' array contains the encoded values
         data[var] = codes
+
+    for variable, mapping in mappings.items():
+        print(f"{variable}: {mapping}")
 
     return data
 
@@ -135,3 +182,19 @@ def calculate_discrete_dims(data, discrete_col_names):
         assert col in data.columns, f"Error: {col} is not a column of input dataframe."
         res.append(data[col].nunique())
     return res
+
+
+def remove_overlapping_indices(primary_set, secondary_set, T):
+    """
+    Remove indices from the secondary_set that overlap with any index in the primary_set,
+    considering the input length T.
+    """
+    to_remove = set()
+    for primary_index in primary_set:
+        # Calculate the range of indices that would overlap with primary_index considering T
+        overlapping_range = set(range(primary_index[0] - T + 1, primary_index[1] + T))
+        to_remove |= (
+            overlapping_range & secondary_set
+        )  # Find and add overlapping indices
+    secondary_set -= to_remove  # Remove overlapping indices
+    return secondary_set

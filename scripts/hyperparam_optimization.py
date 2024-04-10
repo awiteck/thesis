@@ -23,28 +23,36 @@ def get_model(config):
 
 def objective(trial, config):
     # Define the range of hyperparameters
-    d_model = trial.suggest_categorical("d_model", [16, 32, 64, 128, 256])
-    # N = trial.suggest_int("N", 1, 8)
+    d_model = trial.suggest_categorical("d_model", [16, 32, 64, 128, 256, 512, 1024])
+    N = trial.suggest_int("N", 1, 6)
     dropout = trial.suggest_float("dropout", 0, 0.3)
     # d_ff = trial.suggest_categorical("d_ff", [128, 256, 512, 1024, 2048])
     lr = trial.suggest_float("lr", 1e-5, 1e-1, log=True)
+    # enc_seq_len = trial.suggest_categorical("enc_seq_len", [12, 24, 36, 48, 72, 168])
 
-    config["N"] = 2
-    config["num_epochs"] = 15
+    # config["N"] = 2
+    config["num_epochs"] = 1
     config["d_ff"] = 512
     config["d_model"] = d_model
     config["dropout"] = dropout
     config["lr"] = lr
+    config["N"] = N
+    config["enc_seq_len"] = 168
 
     # Train and evaluate the model
     performance_metric = run_training_and_validation(
-        config, save_model=False, return_vals=True, trial=trial
+        config, save_model=False, return_vals=True, trial=trial, small_dataset=False
     )
 
     return performance_metric["avg_rmse"]
 
 
 config = get_config()
+
+config["step_size"] = 24
+config["output_sequence_length"] = 24
+config["data_path"] = "/scratch/network/awiteck/data/composite.csv"
+config["predicted_features"] = ["Normalized Demand"]
 # study = optuna.create_study(
 #     direction="minimize", sampler=optuna.samplers.RandomSampler()
 # )
@@ -56,7 +64,8 @@ study = optuna.create_study(
         ),
         patience=1,
     ),
-    # sampler=optuna.samplers.RandomSampler(),
+    # sampler=optuna.samplers.RandomSampler()
+    sampler=optuna.samplers.TPESampler(),
 )
 study.optimize(lambda trial: objective(trial, config), n_trials=50)
 
@@ -72,11 +81,11 @@ best_params = study.best_params
 best_params_str = "\n".join([f"{key}: {value}" for key, value in best_params.items()])
 
 # Write the best hyperparameters to a file
-with open("best_params_bayesian.txt", "w") as f:
+with open("best_params_bayesian_full_168.txt", "w") as f:
     f.write(best_params_str)
 
 print("Best hyperparameters: ", study.best_params)
-print("Best hyperparameters saved to best_params.txt")
+print("Best hyperparameters saved to best_params_bayesian_full_168.txt")
 
 # Save results to csv file
 df = study.trials_dataframe().drop(
@@ -85,7 +94,7 @@ df = study.trials_dataframe().drop(
 df = df.loc[df["state"] == "COMPLETE"]  # Keep only results that did not prune
 df = df.drop("state", axis=1)  # Exclude state column
 df = df.sort_values("value")  # Sort based on accuracy
-df.to_csv("optuna_results_bayesian.csv", index=False)  # Save to csv file
+df.to_csv("optuna_results_bayesian_full_168.csv", index=False)  # Save to csv file
 
 # Find the most important hyperparameters
 most_important_parameters = optuna.importance.get_param_importances(study, target=None)
@@ -96,5 +105,5 @@ most_important_parameters_str = "\n".join(
     ]
 )
 # Write the best hyperparameters to a file
-with open("most_important_parameters_bayesian.txt", "w") as f:
+with open("most_important_parameters_bayesian_full_168.txt", "w") as f:
     f.write(most_important_parameters_str)

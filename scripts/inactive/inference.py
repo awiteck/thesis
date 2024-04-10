@@ -11,6 +11,7 @@ import math
 # Define the device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
+device = torch.device(device)
 config = get_config()
 
 # Load dataset
@@ -20,6 +21,9 @@ print(f"Data retrieved.")
 df["timestamp"] = pd.to_datetime(df["timestamp"])
 
 data = df
+
+# Ensure all continuous vars are normalized
+data = utils.normalize_continuous_vars(data=data, var_names=config["continuous_vars"])
 
 discrete_var_dims = utils.calculate_discrete_dims(data, config["discrete_vars"])
 print(f"discrete_var_dims: {discrete_var_dims}")

@@ -126,107 +126,67 @@ class TransformerDataset(Dataset):
         )  # change size from [batch_size, target_seq_len, num_features] to [batch_size, target_seq_len]
 
 
-#     def __init__(self, ds, tokenizer_src, tokenizer_tgt, src_lang, tgt_lang, seq_len):
-#         super().__init__()
-#         self.seq_len = seq_len
+class BasicDataset(Dataset):
+    """
+    Dataset class used for basic linear model.
+    """
 
-#         self.ds = ds
-#         self.tokenizer_src = tokenizer_src
-#         self.tokenizer_tgt = tokenizer_tgt
-#         self.src_lang = src_lang
-#         self.tgt_lang = tgt_lang
+    def __init__(
+        self,
+        data: torch.tensor,
+        indices: list,
+        enc_seq_len: int,
+        target_seq_len: int,
+    ) -> None:
+        super().__init__()
+        self.indices = indices
+        self.data = data
+        self.enc_seq_len = enc_seq_len
+        self.target_seq_len = target_seq_len
 
-#         self.sos_token = torch.tensor(
-#             [tokenizer_tgt.token_to_id("[SOS]")], dtype=torch.int64
-#         )
-#         self.eos_token = torch.tensor(
-#             [tokenizer_tgt.token_to_id("[EOS]")], dtype=torch.int64
-#         )
-#         self.pad_token = torch.tensor(
-#             [tokenizer_tgt.token_to_id("[PAD]")], dtype=torch.int64
-#         )
+    def __len__(self):
+        return len(self.indices)
 
-#     def __len__(self):
-#         return len(self.ds)
+    def __getitem__(self, index):
+        """
+        Returns a tuple with 3 elements:
+        1) src (the encoder input)
+        2) trg (the decoder input)
+        3) trg_y (the target)
+        """
+        # Get the first element of the i'th tuple in the list self.indicesasdfas
+        start_idx = self.indices[index][0]
+        # Get the second (and last) element of the i'th tuple in the list self.indices
+        end_idx = self.indices[index][1]
+        sequence = self.data[start_idx:end_idx]
+        src, trg_y = self.get_src_trg(
+            sequence=sequence,
+            enc_seq_len=self.enc_seq_len,
+            target_seq_len=self.target_seq_len,
+        )
 
-#     def __getitem__(self, idx):
-#         src_target_pair = self.ds[idx]
-#         src_text = src_target_pair["translation"][self.src_lang]
-#         tgt_text = src_target_pair["translation"][self.tgt_lang]
+        return src, trg_y
 
-#         # Transform the text into tokens
-#         enc_input_tokens = self.tokenizer_src.encode(src_text).ids
-#         dec_input_tokens = self.tokenizer_tgt.encode(tgt_text).ids
+    def get_src_trg(
+        self,
+        sequence: torch.Tensor,
+        enc_seq_len: int,
+        target_seq_len: int,
+    ):
+        assert (
+            len(sequence) == enc_seq_len + target_seq_len
+        ), "Sequence length does not equal (input length + target length)"
 
-#         # Add sos, eos and padding to each sentence
-#         enc_num_padding_tokens = (
-#             self.seq_len - len(enc_input_tokens) - 2
-#         )  # We will add <s> and </s>
-#         # We will only add <s>, and </s> only on the label
-#         dec_num_padding_tokens = self.seq_len - len(dec_input_tokens) - 1
+        # encoder input
+        src = sequence[:enc_seq_len]
 
-#         # Make sure the number of padding tokens is not negative. If it is, the sentence is too long
-#         if enc_num_padding_tokens < 0 or dec_num_padding_tokens < 0:
-#             raise ValueError("Sentence is too long")
-
-#         # Add <s> and </s> token
-#         encoder_input = torch.cat(
-#             [
-#                 self.sos_token,
-#                 torch.tensor(enc_input_tokens, dtype=torch.int64),
-#                 self.eos_token,
-#                 torch.tensor(
-#                     [self.pad_token] * enc_num_padding_tokens, dtype=torch.int64
-#                 ),
-#             ],
-#             dim=0,
-#         )
-
-#         # Add only <s> token
-#         decoder_input = torch.cat(
-#             [
-#                 self.sos_token,
-#                 torch.tensor(dec_input_tokens, dtype=torch.int64),
-#                 torch.tensor(
-#                     [self.pad_token] * dec_num_padding_tokens, dtype=torch.int64
-#                 ),
-#             ],
-#             dim=0,
-#         )
-
-#         # Add only </s> token
-#         label = torch.cat(
-#             [
-#                 torch.tensor(dec_input_tokens, dtype=torch.int64),
-#                 self.eos_token,
-#                 torch.tensor(
-#                     [self.pad_token] * dec_num_padding_tokens, dtype=torch.int64
-#                 ),
-#             ],
-#             dim=0,
-#         )
-
-#         # Double check the size of the tensors to make sure they are all seq_len long
-#         assert encoder_input.size(0) == self.seq_len
-#         assert decoder_input.size(0) == self.seq_len
-#         assert label.size(0) == self.seq_len
-
-#         return {
-#             "encoder_input": encoder_input,  # (seq_len)
-#             "decoder_input": decoder_input,  # (seq_len)
-#             "encoder_mask": (encoder_input != self.pad_token)
-#             .unsqueeze(0)
-#             .unsqueeze(0)
-#             .int(),  # (1, 1, seq_len)
-#             "decoder_mask": (decoder_input != self.pad_token).unsqueeze(0).int()
-#             & causal_mask(
-#                 decoder_input.size(0)
-#             ),  # (1, seq_len) & (1, seq_len, seq_len),
-#             "label": label,  # (seq_len)
-#             "src_text": src_text,
-#             "tgt_text": tgt_text,
-#         }
-
-# def causal_mask(size):
-#     mask = torch.triu(torch.ones((1, size, size)), diagonal=1).type(torch.int)
-#     return mask == 0
+        # The target sequence against which the model output will be compared to compute loss
+        trg_y = sequence[-target_seq_len:]
+        assert (
+            len(trg_y) == target_seq_len
+        ), "Length of trg_y does not match target sequence length"
+        return (
+            src,
+            trg_y
+            # trg_y[:, 0].squeeze(-1),
+        )  # change size from [batch_size, target_seq_len, num_features] to [batch_size, target_seq_len]
