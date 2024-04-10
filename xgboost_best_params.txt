@@ -1,3 +1,0 @@
-n_estimators: 904
-learning_rate: 0.10895442516518555
-max_depth: 5
